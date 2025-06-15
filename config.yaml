@@ -1,0 +1,55 @@
+data:
+  train_image_dir: "traffic_wala_dataset/train/images"
+  train_annotation_file: "traffic_wala_dataset/train/labels/_annotations.csv"
+  val_image_dir: "traffic_wala_dataset/valid/images"
+  val_annotation_file: "traffic_wala_dataset/valid/labels/_annotations.csv"
+  test_image_dir: "traffic_wala_dataset/test/images"
+  test_annotation_file: "traffic_wala_dataset/test/labels/_annotations.csv"
+  
+  train_transform:
+    - name: "Resize"
+      height: 512
+      width: 512
+    - name: "Normalize"
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+    - name: "ToTensor"
+  
+  val_transform:
+    - name: "Resize"
+      height: 512
+      width: 512
+    - name: "Normalize"
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+    - name: "ToTensor"
+
+model:
+  backbone_channels: [128, 256, 512, 1024]
+  fpn_channels: 256
+  dropout_rate: 0.2
+
+training:
+  batch_size: 8
+  epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  grad_clip: true
+  max_grad_norm: 1.0
+  scheduler:
+    type: 'OneCycleLR'
+    max_lr: 0.001
+    div_factor: 10
+    final_div_factor: 100
+    pct_start: 0.3
+    epochs: 100
+    steps_per_epoch: 67
+
+optimizer:
+  base_lr: 0.0001
+  weight_decay: 0.01
+
+loss:
+  density_weight: 1.0
+  count_weight: 0.1
+  global_weight: 0.1 
