@@ -1,4 +1,5 @@
 import os
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,6 +14,8 @@ from pathlib import Path
 import numpy as np
 import logging
 from datetime import datetime
+import sys
+import argparse
 
 from models.vehicle_counter import VehicleCounter
 from models.loss import VehicleCountingLoss
@@ -143,6 +146,10 @@ def build_transform(transform_config):
     return A.Compose(transforms)
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--resume', type=str, default=None, help='Path to checkpoint to resume from')
+    args = parser.parse_args()
+
     # Load configuration
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
@@ -199,8 +206,10 @@ def main():
     
     # Create model
     model = VehicleCounter(
+        backbone_type=config['model']['backbone_type'],
         backbone_channels=config['model']['backbone_channels'],
-        fpn_channels=config['model']['fpn_channels']
+        fpn_channels=config['model']['fpn_channels'],
+        dropout_rate=config['model'].get('dropout_rate', 0.3)
     ).to(device)
     
     # Create loss function
@@ -217,30 +226,29 @@ def main():
         weight_decay=config['training']['weight_decay']
     )
     
-    # Create scheduler
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=config['training']['scheduler']['max_lr'],
-        epochs=config['training']['scheduler']['epochs'],
-        steps_per_epoch=config['training']['scheduler']['steps_per_epoch'],
-        pct_start=config['training']['scheduler']['pct_start'],
-        div_factor=config['training']['scheduler']['div_factor'],
-        final_div_factor=config['training']['scheduler']['final_div_factor']
-    )
-    
     # Create tensorboard writer and metrics logger
     writer = SummaryWriter(log_dir)
     metrics_logger = MetricsLogger(log_dir)
     
-    # Training loop
+    # Resume logic
+    start_epoch = 0
     best_val_loss = float('inf')
-    for epoch in range(config['training']['epochs']):
+    if args.resume is not None:
+        checkpoint = torch.load(args.resume, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint.get('epoch', 0) + 1
+        best_val_loss = checkpoint.get('val_loss', float('inf'))
+        print(f"Resumed from checkpoint {args.resume} at epoch {start_epoch}")
+    
+    # Training loop
+    for epoch in range(start_epoch, config['training']['epochs']):
         train_loss = train_one_epoch(
             model=model,
             dataloader=train_loader,
             criterion=criterion,
             optimizer=optimizer,
-            scheduler=scheduler,
+            scheduler=None,
             device=device,
             epoch=epoch,
             writer=writer,
@@ -254,7 +262,6 @@ def main():
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
             'train_loss': train_loss,
             'val_loss': val_metrics['val_loss']
         }, os.path.join(log_dir, f'model_epoch_{epoch}.pth'))
@@ -266,7 +273,6 @@ def main():
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
                 'train_loss': train_loss,
                 'val_loss': val_metrics['val_loss']
             }, os.path.join(log_dir, 'best_model.pth'))

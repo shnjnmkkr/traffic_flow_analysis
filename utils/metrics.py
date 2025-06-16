@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from typing import List, Dict
+from sklearn.metrics import r2_score
+import scipy.stats
 
 def calculate_metrics(predictions: List[Dict], targets: List[Dict]) -> Dict:
     """
@@ -41,6 +43,11 @@ def calculate_metrics(predictions: List[Dict], targets: List[Dict]) -> Dict:
     
     map_score = sum(map_scores) / len(thresholds)
     
+    pred_counts_np = pred_counts.numpy()
+    target_counts_np = target_counts.numpy()
+    r2 = r2_score(target_counts_np, pred_counts_np)
+    pearson = scipy.stats.pearsonr(target_counts_np, pred_counts_np)[0]
+    
     metrics = {
         'mae': count_abs_error.mean().item(),
         'rmse': torch.sqrt(torch.mean((pred_counts - target_counts) ** 2)).item(),
@@ -51,7 +58,9 @@ def calculate_metrics(predictions: List[Dict], targets: List[Dict]) -> Dict:
         'map': map_score.item(),
         'accuracy_10%': (count_rel_error < 0.1).float().mean().item(),
         'accuracy_20%': (count_rel_error < 0.2).float().mean().item(),
-        'accuracy_30%': (count_rel_error < 0.3).float().mean().item()
+        'accuracy_30%': (count_rel_error < 0.3).float().mean().item(),
+        'r2': r2,
+        'pearson': pearson
     }
     
     return metrics 

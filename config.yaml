@@ -5,11 +5,40 @@ data:
   val_annotation_file: "traffic_wala_dataset/valid/labels/_annotations.csv"
   test_image_dir: "traffic_wala_dataset/test/images"
   test_annotation_file: "traffic_wala_dataset/test/labels/_annotations.csv"
+  image_size: 640
   
   train_transform:
     - name: "Resize"
       height: 512
       width: 512
+    - name: "RandomResizedCrop"
+      height: 512
+      width: 512
+      scale: [0.6, 1.0]
+      ratio: [0.75, 1.33]
+      p: 0.5
+    - name: "RandomCrop"
+      height: 480
+      width: 480
+      p: 0.3
+    - name: "ColorJitter"
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.1
+      p: 0.3
+    - name: "Cutout"
+      num_holes: 4
+      max_h_size: 32
+      max_w_size: 32
+      p: 0.3
+    - name: "RandomBrightnessContrast"
+      p: 0.3
+    - name: "RandomScale"
+      scale_limit: [-0.2, 0.2]
+      p: 0.5
+    - name: "HorizontalFlip"
+      p: 0.5
     - name: "Normalize"
       mean: [0.485, 0.456, 0.406]
       std: [0.229, 0.224, 0.225]
@@ -25,31 +54,32 @@ data:
     - name: "ToTensor"
 
 model:
+  backbone_type: "custom"
   backbone_channels: [128, 256, 512, 1024]
   fpn_channels: 256
-  dropout_rate: 0.2
+  dropout_rate: 0.3
 
 training:
   batch_size: 8
   epochs: 100
-  learning_rate: 0.0001
+  learning_rate: 0.00005
   weight_decay: 0.0001
   grad_clip: true
-  max_grad_norm: 1.0
+  max_grad_norm: 0.5
   scheduler:
     type: 'OneCycleLR'
-    max_lr: 0.001
-    div_factor: 10
+    max_lr: 0.0005
+    div_factor: 25
     final_div_factor: 100
     pct_start: 0.3
     epochs: 100
     steps_per_epoch: 67
 
 optimizer:
-  base_lr: 0.0001
+  base_lr: 0.00005
   weight_decay: 0.01
 
 loss:
   density_weight: 1.0
-  count_weight: 0.1
+  count_weight: 0.7
   global_weight: 0.1 

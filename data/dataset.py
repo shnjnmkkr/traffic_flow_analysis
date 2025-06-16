@@ -22,78 +22,85 @@ class VehicleCountingDataset(Dataset):
         
         # Set up paths
         self.img_dir = self.root_dir / split / 'images'
-        self.csv_path = self.root_dir / split / 'labels' / '_annotations.csv'
+        self.label_dir = self.root_dir / split / 'labels'
         
         # Verify paths exist
         if not self.img_dir.exists():
             raise FileNotFoundError(f"Image directory not found: {self.img_dir}")
-        if not self.csv_path.exists():
-            raise FileNotFoundError(f"Annotations file not found: {self.csv_path}")
+        if not self.label_dir.exists():
+            raise FileNotFoundError(f"Label directory not found: {self.label_dir}")
         
-        # Load annotations
-        self.annotations = pd.read_csv(self.csv_path)
-        
-        # Get unique image filenames
-        self.image_files = sorted(list(set(self.annotations['filename'])))
-        
+        # Get all image filenames
+        self.image_files = sorted([f for f in os.listdir(self.img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
         print(f"Found {len(self.image_files)} images in {split} dataset")
         print(f"Image directory: {self.img_dir}")
-        print(f"Annotations file: {self.csv_path}")
-        
+        print(f"Label directory: {self.label_dir}")
+
+    def parse_yolo_label(self, label_path, img_width, img_height):
+        """Parse YOLO .txt label file and return bounding boxes in pixel coordinates."""
+        boxes = []
+        if not os.path.exists(label_path):
+            return boxes
+        with open(label_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) != 5:
+                    continue
+                cls, x_center, y_center, w, h = map(float, parts)
+                # Convert normalized to pixel coordinates
+                x_center *= img_width
+                y_center *= img_height
+                w *= img_width
+                h *= img_height
+                xmin = int(x_center - w / 2)
+                ymin = int(y_center - h / 2)
+                xmax = int(x_center + w / 2)
+                ymax = int(y_center + h / 2)
+                boxes.append([xmin, ymin, xmax, ymax])
+        return boxes
+
     def __len__(self):
         return len(self.image_files)
     
     def generate_density_map(self, boxes, img_size):
         """Generate density map from bounding boxes"""
         density_map = np.zeros(img_size, dtype=np.float32)
-        
         for box in boxes:
             xmin, ymin, xmax, ymax = box
-            # Calculate center point
             center_x = int((xmin + xmax) / 2)
             center_y = int((ymin + ymax) / 2)
-            
-            # Add Gaussian kernel at center point
-            sigma = 4  # Adjust this value to control the spread of the Gaussian
+            sigma = 3  # Reduced from 4 to 3 for sharper density peaks
             x = np.arange(0, img_size[1], 1, float)
             y = np.arange(0, img_size[0], 1, float)
             y = y[:, np.newaxis]
-            
-            # Create 2D Gaussian kernel
             gaussian = np.exp(-((x - center_x) ** 2 + (y - center_y) ** 2) / (2 * sigma ** 2))
+            gaussian /= gaussian.sum()  # Normalize so sum is 1
             density_map += gaussian
-            
         return density_map
     
     def __getitem__(self, idx):
         img_name = self.image_files[idx]
         img_path = self.img_dir / img_name
-        
+        label_path = self.label_dir / (img_name.replace('.jpg', '.txt').replace('.jpeg', '.txt').replace('.png', '.txt'))
         # Load image
         image = Image.open(img_path).convert('RGB')
         image = np.array(image)
-        
-        # Get all boxes for this image
-        img_boxes = self.annotations[self.annotations['filename'] == img_name]
-        boxes = img_boxes[['xmin', 'ymin', 'xmax', 'ymax']].values
-        
+        img_height, img_width = image.shape[:2]
+        # Parse YOLO label file
+        boxes = self.parse_yolo_label(label_path, img_width, img_height)
         # Generate density map
         density_map = self.generate_density_map(boxes, image.shape[:2])
-        
         # Apply transforms
         if self.transform:
             transformed = self.transform(image=image, mask=density_map)
             image = transformed['image']
             density_map = transformed['mask']
-        
         # Convert density map to tensor and add channel dimension
         if not isinstance(density_map, torch.Tensor):
             density_map = torch.from_numpy(density_map)
         density_map = density_map.unsqueeze(0).float()
-        
         # Get count from number of boxes
         count = torch.tensor(len(boxes), dtype=torch.float32)
-        
         return {
             'image': image,
             'density_map': density_map,

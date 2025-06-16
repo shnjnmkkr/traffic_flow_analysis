@@ -5,17 +5,17 @@ from .fpn import FPN
 from .counting_head import DensityHead, CountHead
 
 class VehicleCounter(nn.Module):
-    def __init__(self, backbone_channels=[128, 256, 512, 1024], fpn_channels=256):
+    def __init__(self, backbone_channels=[128, 256, 512, 1024], fpn_channels=256, dropout_rate=0.3, backbone_type="custom"):
         super().__init__()
         
         # Initialize backbone and FPN
-        self.backbone = CustomBackbone(in_channels=3)
-        self.fpn = FPN(backbone_channels, fpn_channels)
+        self.backbone = CustomBackbone(in_channels=3, backbone_type=backbone_type)
+        self.fpn = FPN(backbone_channels, fpn_channels, dropout_rate=dropout_rate)
         
         # Initialize heads
-        self.density_head = DensityHead(fpn_channels, fpn_channels)
-        self.count_head = CountHead(fpn_channels, fpn_channels)
-        self.global_head = CountHead(fpn_channels, fpn_channels)
+        self.density_head = DensityHead(fpn_channels, fpn_channels, dropout_rate=dropout_rate)
+        self.count_head = CountHead(fpn_channels, fpn_channels, dropout_rate=dropout_rate)
+        self.global_head = CountHead(fpn_channels, fpn_channels, dropout_rate=dropout_rate)
         
     def forward(self, x):
         # Get backbone features
