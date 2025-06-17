@@ -1,0 +1,130 @@
+import os
+import torch
+import cv2
+import numpy as np
+from scipy.ndimage import center_of_mass
+from tqdm import tqdm
+from collections import defaultdict
+from models.vehicle_counter import VehicleCounter
+from albumentations.pytorch import ToTensorV2
+import albumentations as A
+
+DEVICE = torch.device("cuda") # Choose preffered device
+MODEL_PATH = "/logs/20250616_142942/best_model.pth" # Replace with the path for the model trained
+FRAMES_FOLDER = "/traffic_wala_dataset/valid/images" # Replace with Image dataset
+
+# Image Transform
+transform = A.Compose([
+    A.Resize(512, 512),
+    A.Normalize(mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]),
+    ToTensorV2()
+])
+
+def preprocess_image(image_path):
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    transformed = transform(image=image)
+    return transformed["image"].unsqueeze(0)
+
+def load_model():
+    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
+    model = VehicleCounter(backbone_channels=[128,256,512,1024], fpn_channels=256)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model = model.to(DEVICE).eval()
+    return model
+
+def group_frames_by_video(folder_path):
+    grouped = defaultdict(list)
+    for filename in os.listdir(folder_path):
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+            prefix = filename.split("_")[0]
+            grouped[prefix].append(os.path.join(folder_path, filename))
+    return grouped
+
+def estimate_max_capacity(model, grouped_frames):
+    all_counts = []
+    for frame_list in tqdm(grouped_frames.values(), desc="Analyzing frames"):
+        for path in frame_list:
+            img_tensor = preprocess_image(path).to(DEVICE)
+            with torch.no_grad():
+                output = model(img_tensor)
+                count = output["count"].item()
+                all_counts.append(count)
+
+def estimate_congestion_for_group(model, frame_paths, max_capacity):
+    congestion_scores = []
+    video_id = os.path.basename(frame_paths[0]).split('_')[0]
+    for path in tqdm(frame_paths, desc=f"Frames: {video_id}", leave=False):
+        img_tensor = preprocess_image(path).to(DEVICE)
+        with torch.no_grad():
+            output = model(img_tensor)
+            count = output["count"].item()
+            congestion = min(count / max_capacity, 1.0)
+            congestion_scores.append(congestion)
+    return np.mean(congestion_scores)
+
+def get_density_centroid(density_map):
+    density_np = density_map.squeeze().cpu().numpy()
+    threshold = 0.3 * density_np.max() 
+    mask = (density_np > threshold).astype(np.float32)
+    if mask.sum() == 0:
+        return None
+    centroid = center_of_mass(mask)
+    return centroid[::-1] 
+
+def estimate_direction_from_density(model, frame_paths, device):
+    prev_centroid = None
+    directions = []
+
+    for path in frame_paths:
+        frame = cv2.imread(path)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        input_tensor = transform(image=frame_rgb)["image"].unsqueeze(0).to(device)
+
+        with torch.no_grad():
+            output = model(input_tensor)["density"]
+        
+        curr_centroid = get_density_centroid(output)
+
+        if prev_centroid and curr_centroid:
+            dx = curr_centroid[0] - prev_centroid[0]
+            dy = curr_centroid[1] - prev_centroid[1]
+            directions.append((dx, dy))
+
+        prev_centroid = curr_centroid
+
+    if directions:
+        avg_dx = np.mean([d[0] for d in directions])
+        avg_dy = np.mean([d[1] for d in directions])
+        angle = np.arctan2(avg_dy, avg_dx) * 180 / np.pi
+        direction = interpret_angle(angle)
+        return direction
+    else:
+        return "Not enough data"
+
+def interpret_angle(angle):
+    if -45 <= angle <= 45:
+        return "Right"
+    elif 45 < angle <= 135:
+        return "Down"
+    elif angle > 135 or angle < -135:
+        return "Left"
+    elif -135 <= angle < -45:
+        return "Up"
+    else:
+        return "Unknown"
+
+def main():
+    model = load_model()
+    grouped_frames = group_frames_by_video(FRAMES_FOLDER)
+    max_capacity = estimate_max_capacity(model, grouped_frames)
+
+    for vid_id, frame_list in sorted(grouped_frames.items(), key=lambda x: int(x[0])):
+        avg_cong = estimate_congestion_for_group(model, sorted(frame_list), max_capacity)
+        print(f"\nEstimated Congestion in Video {vid_id}: {avg_cong:.3f}")
+        direction = estimate_direction_from_density(model, sorted(frame_list), DEVICE)
+        print(f"\nEstimated Traffic Flow Direction in Video {vid_id}: {direction}")
+
+if __name__ == "__main__":
+    main()
