@@ -195,6 +195,13 @@ class CustomBackbone(nn.Module):
                 InceptionBlock(64, 128),
                 ResidualBlock(128, 128)
             )
+        elif backbone_type == "hybrid":
+            dense1_in, dense1_out, dense1_layers = 64, 128, 4
+            dense1_final = dense1_in + dense1_layers * dense1_out
+            self.stage1 = nn.Sequential(
+                DenseBlock(dense1_in, dense1_out, num_layers=dense1_layers),
+                SEBlock(dense1_final)
+            )
         
         # Stage 2 (1/8)
         if backbone_type == "custom":
@@ -218,6 +225,13 @@ class CustomBackbone(nn.Module):
                 SEBlock(256),
                 InceptionBlock(256, 256),
                 ResidualBlock(256, 256)
+            )
+        elif backbone_type == "hybrid":
+            dense2_in, dense2_out, dense2_layers = dense1_final, 256, 4
+            dense2_final = dense2_in + dense2_layers * dense2_out
+            self.stage2 = nn.Sequential(
+                DenseBlock(dense2_in, dense2_out, num_layers=dense2_layers),
+                SEBlock(dense2_final)
             )
         
         # Stage 3 (1/16)
@@ -243,6 +257,13 @@ class CustomBackbone(nn.Module):
                 InceptionBlock(512, 512),
                 ResidualBlock(512, 512)
             )
+        elif backbone_type == "hybrid":
+            dense3_in, dense3_out, dense3_layers = dense2_final, 512, 4
+            dense3_final = dense3_in + dense3_layers * dense3_out
+            self.stage3 = nn.Sequential(
+                DenseBlock(dense3_in, dense3_out, num_layers=dense3_layers),
+                SEBlock(dense3_final)
+            )
         
         # Stage 4 (1/32)
         if backbone_type == "custom":
@@ -263,6 +284,14 @@ class CustomBackbone(nn.Module):
                 ResidualBlock(512, 1024, stride=2),
                 SEBlock(1024),
                 ASPP(1024, 1024)
+            )
+        elif backbone_type == "hybrid":
+            dense4_in, dense4_out, dense4_layers = dense3_final, 1024, 4
+            dense4_final = dense4_in + dense4_layers * dense4_out
+            self.stage4 = nn.Sequential(
+                DenseBlock(dense4_in, dense4_out, num_layers=dense4_layers),
+                SEBlock(dense4_final),
+                SelfAttention(dense4_final)
             )
 
     def forward(self, x):
