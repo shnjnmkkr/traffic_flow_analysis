@@ -135,7 +135,7 @@ while True:
                 distance_px = math.hypot(cx - x_prev, cy - y_prev)
                 time_elapsed = (frame_idx - f_prev) / fps
                 speed_px_per_s = distance_px / time_elapsed if time_elapsed > 0 else 0
-                speed_kmh = speed_px_per_s * 0.1195259 
+                speed_kmh = speed_px_per_s * 0.1195259 #Replace the Conversion factor with the one obtained from convert.py
                 vehicle_speeds[id] = speed_kmh
                 vehicle_speed_list.append(speed_kmh)
                 last_update_frame[id] = frame_idx
