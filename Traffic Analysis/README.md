@@ -52,7 +52,7 @@ python flow.py
 
 ## How It Works
 
-1. **Pixel Calibration Tool (convert.py) **
+1. **Pixel Calibration Tool (convert.py)**
 
    * Extracts a frame from the video
    * User clicks on two points of known real-world distance (e.g., lane width)
