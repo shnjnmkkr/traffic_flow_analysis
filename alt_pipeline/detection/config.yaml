@@ -1,0 +1,25 @@
+# Training configuration for RefineDet alternative pipeline
+
+# Training parameters
+num_epochs: 50
+batch_size: 8
+learning_rate: 0.001
+weight_decay: 0.0001
+lr_step_size: 20
+lr_gamma: 0.1
+save_interval: 10
+
+# Data parameters
+num_workers: 4
+
+# Model parameters
+num_classes: 2  # background + vehicle class
+num_anchors: 6
+
+# Loss parameters
+iou_threshold: 0.5
+neg_pos_ratio: 3
+
+# Directories
+log_dir: logs
+checkpoint_dir: checkpoints 

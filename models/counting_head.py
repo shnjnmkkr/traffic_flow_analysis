@@ -39,14 +39,21 @@ class SpatialAttention(nn.Module):
         return self.sigmoid(x)
 
 class DensityHead(nn.Module):
-    def __init__(self, in_channels, fpn_channels):
+    def __init__(self, in_channels, fpn_channels, dropout_rate=0.3):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, fpn_channels, 3, padding=1)
-        self.bn1 = nn.BatchNorm2d(fpn_channels)
-        self.conv2 = nn.Conv2d(fpn_channels, fpn_channels, 3, padding=1)
-        self.bn2 = nn.BatchNorm2d(fpn_channels)
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, fpn_channels, 3, padding=1),
+            nn.BatchNorm2d(fpn_channels),
+            nn.ReLU(),
+            nn.Dropout2d(dropout_rate)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(fpn_channels, fpn_channels, 3, padding=1),
+            nn.BatchNorm2d(fpn_channels),
+            nn.ReLU(),
+            nn.Dropout2d(dropout_rate)
+        )
         self.conv3 = nn.Conv2d(fpn_channels, 1, 1)
-        self.dropout = nn.Dropout(0.2)
         
         # Attention mechanisms
         self.spatial_attention = SpatialAttention()
@@ -55,15 +62,9 @@ class DensityHead(nn.Module):
     def forward(self, x):
         # First conv block
         x = self.conv1(x)
-        x = self.bn1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
         
         # Second conv block
         x = self.conv2(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
         
         # Apply attention before final conv
         x = x * self.channel_attention(x)
@@ -74,13 +75,20 @@ class DensityHead(nn.Module):
         return x
 
 class CountHead(nn.Module):
-    def __init__(self, in_channels, fpn_channels):
+    def __init__(self, in_channels, fpn_channels, dropout_rate=0.3):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, fpn_channels, 3, padding=1)
-        self.bn1 = nn.BatchNorm2d(fpn_channels)
-        self.conv2 = nn.Conv2d(fpn_channels, fpn_channels, 3, padding=1)
-        self.bn2 = nn.BatchNorm2d(fpn_channels)
-        self.dropout = nn.Dropout(0.2)
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, fpn_channels, 3, padding=1),
+            nn.BatchNorm2d(fpn_channels),
+            nn.ReLU(),
+            nn.Dropout2d(dropout_rate)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(fpn_channels, fpn_channels, 3, padding=1),
+            nn.BatchNorm2d(fpn_channels),
+            nn.ReLU(),
+            nn.Dropout2d(dropout_rate)
+        )
         
         # Attention mechanisms
         self.spatial_attention = SpatialAttention()
@@ -90,23 +98,18 @@ class CountHead(nn.Module):
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Sequential(
             nn.Linear(fpn_channels, fpn_channels // 2),
+            nn.BatchNorm1d(fpn_channels // 2),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(dropout_rate),
             nn.Linear(fpn_channels // 2, 1)
         )
         
     def forward(self, x):
         # First conv block
         x = self.conv1(x)
-        x = self.bn1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
         
         # Second conv block
         x = self.conv2(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
         
         # Apply attention before pooling
         x = x * self.channel_attention(x)
@@ -119,36 +122,39 @@ class CountHead(nn.Module):
         return x.squeeze(-1)
 
 class RegressionHead(nn.Module):
-    def __init__(self, in_channels, fpn_channels):
+    def __init__(self, in_channels, fpn_channels, dropout_rate=0.3):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, fpn_channels, 3, padding=1)
-        self.bn1 = nn.BatchNorm2d(fpn_channels)
-        self.conv2 = nn.Conv2d(fpn_channels, fpn_channels, 3, padding=1)
-        self.bn2 = nn.BatchNorm2d(fpn_channels)
-        self.dropout = nn.Dropout(0.2)
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(in_channels, fpn_channels, 3, padding=1),
+            nn.BatchNorm2d(fpn_channels),
+            nn.ReLU(),
+            nn.Dropout2d(dropout_rate)
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(fpn_channels, fpn_channels, 3, padding=1),
+            nn.BatchNorm2d(fpn_channels),
+            nn.ReLU(),
+            nn.Dropout2d(dropout_rate)
+        )
+        
         self.spatial_attention = SpatialAttention()
         self.channel_attention = ChannelAttention(fpn_channels)
+        
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Sequential(
             nn.Linear(fpn_channels, fpn_channels // 2),
+            nn.BatchNorm1d(fpn_channels // 2),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(dropout_rate),
             nn.Linear(fpn_channels // 2, 1)
         )
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.bn1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
         x = self.conv2(x)
-        x = self.bn2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.spatial_attention(x)
-        x = self.channel_attention(x)
+        x = x * self.channel_attention(x)
+        x = x * self.spatial_attention(x)
         x = self.global_pool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        x = x.squeeze(-1)
-        return x 
+        return x.squeeze(-1) 
