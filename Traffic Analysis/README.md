@@ -34,7 +34,7 @@ flow.py                       # Main File with Pipeline that outputs annotated v
 
 ## Setup and Use
 
-Before running analysis, run the calibration tool (convert.py) to get the scale:
+Before running analysis, run the calibration tool (`convert.py`) to get the scale:
 
 ```bash
 python convert.py
@@ -42,7 +42,7 @@ python convert.py
 
 Click two points with a known distance between them. The script will calculate how many meters one pixel represents.
 
-Run flow.py after updating input video
+Run `flow.py` after updating input video
 
 ```bash
 python flow.py
@@ -52,7 +52,7 @@ python flow.py
 
 ## How It Works
 
-1. **Pixel Calibration Tool (convert.py)**
+1. **Pixel Calibration Tool (`convert.py`)**
 
    * Extracts a frame from the video
    * User clicks on two points of known real-world distance (e.g., lane width)
@@ -93,10 +93,10 @@ python flow.py
 
 ## Congestion Thresholds
 
-* > 80% → Severe Congestion
-* > 55% → High Congestion
-* > 25% → Moderate Congestion
-* ≤ 25% → Low Congestion
+* > > 80% → Severe Congestion
+* > > 55% → High Congestion
+* > > 25% → Moderate Congestion
+* > ≤ 25% → Low Congestion
 
 ---
 
