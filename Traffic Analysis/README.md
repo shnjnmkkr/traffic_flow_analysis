@@ -93,10 +93,10 @@ python flow.py
 
 ## Congestion Thresholds
 
-* > > 80% → Severe Congestion
-* > > 55% → High Congestion
-* > > 25% → Moderate Congestion
-* > ≤ 25% → Low Congestion
+* > 80-100% → Severe Congestion
+* > 55-80% → High Congestion
+* > 25-55% → Moderate Congestion
+* > 0-25% → Low Congestion
 
 ---
 
@@ -115,5 +115,3 @@ python flow.py
 * Fully Automated Scaling Factor
 
 ---
-
-Let me know if you'd like a LaTeX version, GitHub-compatible badges, or to split this into sections like `docs/`, boss.
